@@ -3,11 +3,12 @@
  This archive provides a simple generic implementation of the (regularized) algorithm described in the paper 
 
 > *"Regularized decomposition of large scale block-structured robust optimization problems"*
-> --- by **Wim van Ackooij**, **Nicolas Lebbe** and **Jérôme Malick**.
+>
+> by **Wim van Ackooij**, **Nicolas Lebbe** and **Jérôme Malick**.
 
 
-### Robust block-structured optimization
-
+Robust block-structured optimization
+--
 
 We consider block-structured optimization problems of the following form
 
@@ -31,13 +32,14 @@ The algorithm use a bundle-based decomposition methods to tackle large scale ins
   minₓᵢ fᵢ(xᵢ) + bᵀx + 1/2 xᵀAx
 ```
 
-### Getting Started
+Getting Started
+--
 
-##### Prerequisites
+### Prerequisites
 
  This program use the `CPLEX` and `Eigen` libraries and must be linked in the given `Makefile` by modifying respectively the `CPLEXPATH` and `EIGENPATH` variables.
  
-##### Installing
+### Installing
 
 The tests are then compiled using a simple
 ```Shell
@@ -45,66 +47,90 @@ The tests are then compiled using a simple
 ```
  command in the root directory of the archive.
 
-### Running the tests
+Running the tests
+--
 
 
 Two examples are available in the `tests` directory.
 
-##### Quadratic sum
+### Quadratic sum
 
 A simple example is given in `tests/test_simple.cpp` where we solve problem (1) for `m` quadratic functions `fᵢ = aᵢxᵢ² + bᵢxᵢ + cᵢ` with `Xᵢ = [-M,M]` and a two-branch penalization function `Ψ = sup(d ∈ [μ-k,μ+k]) φ(d,x)` with `φ(d,x) = max(c₁(∑ᵢxᵢ-d),c₂(∑ᵢxᵢ-d))`.
 
+To run this example :
 ```Shell
  $ make
  $ ./bin/test_simple
 ```
 
-##### Unit commitment
+### Unit commitment
 
-A more usefull example is given in `tests/test_uc.cpp` solving a basic unit commitment problem containing thermal units described below :
- 
+A more usefull example is given in `tests/test_uc.cpp` solving a basic unit commitment problem containing thermal units described below.
+Each unit `Uᵢ (i = 0,…,8)` use `T=24` (the next 24 hours) variables `xᵢₜ` which correspond to the production of the unit at time `t`
+
+**Functions `fᵢ` :**
+
+The global cost for the schedule `xᵢₜ` of unit `Uᵢ` is given using a simple linear formula 
 ```
-Each unit Uᵢ (i = 0,…,8) use T=24 variables xᵢₜ which correspond to the production of the unit at time t
+fᵢ(xᵢₜ) = bᵢᵀxᵢ
+```
 
-Functions fᵢ :
-the global cost for the schedule xᵢₜ of unit Uᵢ is given using a simple linear formula 
+**Domain `Xᵢ ⊂ R²⁴` :**
 
-    fᵢ(xᵢₜ) = bᵢᵀxᵢ
-
-
-Domain Xᵢ ⊂ R²⁴ :
-for each unit the production is bounded from 0 to Mᵢ, so
-
-    0 ≤ xᵢₜ ≤ Mᵢ
-
-and between two consecutive time steps ₜ, ₜ₊₁ the production might be modified to at most Kᵢ
-
-    |xᵢₜ-xᵢₜ₊₁| ≤ Kᵢ,  t > 1
+For each unit the production is bounded from 0 to `Mᵢ`, so
+```
+0 ≤ xᵢₜ ≤ Mᵢ
+```
+and between two consecutive time steps t, t+1 the production might be modified to at most `Kᵢ`.
+```
+|xᵢₜ-xᵢₜ₊₁| ≤ Kᵢ,  t > 1
+```
     
-lastly, each unit start with a given production xᵢ₀
-
-    |xᵢ₀-xᵢ₁| ≤ Kᵢ
-
-
-Oracle Ψ :
-we decide to modelize the  uncertainty set D by a cubic set around the average load μ and a width of k.
-
-for a given demand d ∈ D the cost φ penalize underproduction linearly by a factor c₁ ≤ 0 and surproduction by a factor c₂ ≥ 0 using the following formula
-
-    φ(d,y) = max(c₁(y-d),c₂(y-d))
-
-the Ψ function is then
-
-    Ψ(x) = ∑ₜ sup(dₜ ∈ Dₜ) φ(dₜ,(Ax)ₜ)
-
-with (Ax)ₜ = ∑ᵢ xᵢₜ the production at time step t.
+Lastly, each unit start with a given production `xᵢ₀`
+```
+|xᵢ₀-xᵢ₁| ≤ Kᵢ
 ```
 
+**Oracle Ψ :**
+
+We decide to modelize the  uncertainty set `D` by a cubic set around the average load `μ` and a width of `k`.
+
+For a given demand `d ∈ D` the cost `φ` penalize underproduction linearly by a factor `c₁ ≤ 0` and surproduction by a factor `c₂ ≥ 0` using the following formula
+```
+φ(d,y) = max(c₁(y-d),c₂(y-d)),
+```
+the `Ψ` function is then
+```
+Ψ(x) = ∑ₜ sup(dₜ ∈ Dₜ) φ(dₜ,(Ax)ₜ)
+```
+with `(Ax)ₜ = ∑ᵢ xᵢₜ` the production at time step `t`.
+
+To run this example :
 ```Shell
  $ make
  $ ./bin/test_uc
 ```
 
-### Documentation
+Documentation
+--
 
-Including the file `rrbsopb.h` you have access to the class `rrbsopb`
+Including the file `rrbsopb.h` you have access to the class `rbsopb` and `rrbsopb` whose unique constructors requires 3 parameters :
+```C++
+rrbsopb(VectorXi &ni, double(*fi)(int,VectorXd&,VectorXd&,VectorXd&), double(*psi)(VectorXd&,VectorXd&));
+//  ni : vector of m integers containing the number of variables of each block
+//  fi : pointer to a function of 4 variables : int i, VectorXd& x, VectorXd& b, VectorXd& A
+//        i : the number of a block
+//        x : the variable x which minimize fᵢ(xᵢ) + bᵀx + 1/2 xᵀdiag(A)x
+//        b : vector corresponding to an additional linear term
+//        A : vector corresponding to the diagonal of the matrix of an additional quadratic term
+//       the function fi should return the value of minₓᵢ fᵢ(xᵢ) + bᵀx + 1/2 xᵀdiag(A)x
+// psi : pointer to a function of 2 variables : VectorXd& x, VectorXd& g
+//        x : point of evaluation of the function Ψ
+//        g : a subgradient of Ψ(x)
+//       the function psi should return the value of Ψ(x)
+```
+*The files in the `tests` directory gives two simple examples using this constructor.*
+
+Once a `rrbsopb` (or `rbsopb`) is defined you can specify if the algorithm should use warm-start or not using the method `setWarmStart(bool)` and the primal recovery method to use with the method `setPrimalRecovery(bool)` (`true` for a dantzig-wolfe-like method and `false` to simply use the best iterate).
+
+The method `double solve(VectorXd& x)` solve the optimization problem, returning the final objective with the corresponding variable `x`.
