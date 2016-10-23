@@ -1,0 +1,6 @@
+objs/*.o
+bin/*
+src/tmp/*
+src/rbundle*
+tests/test_bundle.cpp
+tests/test_lp.cpp
