@@ -24,9 +24,11 @@ readme:
 	cat README
 
 bin/%: $(OBJS) tests/%.cpp
+	@mkdir -p bin/
 	$(CXX) -o $@ $^ $(LDFLAGS) $(INCLUDE)
 
 objs/%.o: src/%.cpp src/%.h
+	@mkdir -p objs/
 	$(CXX) -o $@ -c $< $(CXXFLAGS) $(INCLUDE)
 
 clean:
