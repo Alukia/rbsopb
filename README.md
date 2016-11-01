@@ -131,6 +131,60 @@ rrbsopb(VectorXi &ni, double(*fi)(int,VectorXd&,VectorXd&,VectorXd&), double(*ps
 ```
 *The files in the `tests` directory gives two simple examples using this constructor.*
 
-Once a `rrbsopb` (or `rbsopb`) is defined you can specify if the algorithm should use warm-start or not using the method `setWarmStart(bool)` and the primal recovery method to use with the method `setPrimalRecovery(bool)` (`true` for a dantzig-wolfe-like method and `false` to simply use the best iterate).
+Once a `rrbsopb` (or `rbsopb`) is defined you can specify some parameters using the following methods :
 
-The method `double solve(VectorXd& x)` solve the optimization problem, returning the final objective with the corresponding variable `x`.
+```C++
+// set type of primal recovery
+// 0 : best-iterate, 1 : Dantzig-Wolfe-like
+rbsopb* setPrimalRecovery(bool b);
+```
+
+```C++
+// set if warm start is on or off
+rbsopb* setWarmStart(bool b);
+```
+
+```C++
+// set max number of cuts for the warm start
+rbsopb* setMaxCutsWS(int nb);
+```
+
+```C++
+// set maximum number of iterations for the bundle
+rbsopb* setMaxInternIt(int nb);
+```
+
+```C++
+// set maximum number of iterations for the algorithm
+rbsopb* setMaxOuterIt(int nb);
+```
+
+```C++
+// set precision for the bundle maximizing Θₖ(μ)
+rbsopb* setInternPrec(double gap);
+```
+
+```C++
+// set precision for the algorithm
+rbsopb* setOuterPrec(double gap);
+```
+
+```C++
+// set a time limit for the solver of each bundle iteration
+rbsopb* setTimeLimit(double time);
+```
+
+```C++
+// set a time limit for the dantzig-wolfe recovery
+rbsopb* setPrimalTimeLimit(double time);
+```
+
+```C++
+// set verbosity level
+// 0 : no text displayed
+// 1 : general information for each steps
+// 2 : complete information for each inner and outer steps
+rbsopb* setVerbosity(int n);
+```
+
+Then using the method `double solve(VectorXd& x)` you can solve the optimization problem, returning the final objective with the corresponding variable `x`.
