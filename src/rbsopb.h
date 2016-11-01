@@ -1,6 +1,6 @@
 #pragma once
 
-#include "bundle.h"
+#include "rbundle.h"
 
 /*********************************************
  * solve a robust block-structured           *
@@ -64,24 +64,31 @@
  *   otherwise k ← k+1 and return in step 2  *
  *********************************************/
 
+#define debug(n,s) if(verbosity >= n) std::cout << s << std::endl
+
 class rbsopb {
 
 protected:
 
-	int maxIter; // max number of iterations
-	double tol;  // tolerance for convergence
-	bool verb;   // verbose ?
+	int maxInternIt; // max number of iterations for the bundle
+	int maxOuterIt;  // max number of iterations for the algorithm
+	double tolIntern; // tolerance for convergence of the bundle
+	double tolOuter;  // tolerance for convergence of the algorithm
+	double maxTime; // max time for each steps of the bundle
+	int verbosity; // verbosity level
+	double primalMaxTime; // primal recovery max time to solve
 	bool primal; // true : dantzig-wolfe, false : best iterate
 	bool ws;     // warm start ?
 	int ws_nb;   // max number of warm-start cuts 
-	int ws_k;    // current index to add cuts for ws
-	int ws_n;    // current number of warm-start cuts
+	int ws_n;    // number of warm-start cuts
 
 	int n; // number of variables for x
 	int m; // number of blocks
 
 	VectorXi ni;     // ni(i) = number of dimensions for xᵢ
 	VectorXi sumpni; // sumpni(i) = n₀ + … + nᵢ
+
+	int nbOracleCall; // number of intern bundle steps
 
 	// the function f which for each integer 0 ≤ i ≤m-1 
 	// solve minₓᵢ fᵢ(xᵢ) + bᵀxᵢ + 1/2 xᵢᵀ A xᵢ 
@@ -105,12 +112,12 @@ protected:
 	double initialize(int N, VectorXd&);
 
 	// variables for warm-start
-	MatrixXd ws_mu;
-	MatrixXd ws_x;
-	VectorXd ws_theta;
+	std::deque<VectorXd> ws_mu;
+	std::deque<VectorXd> ws_x;
+	std::deque<double> ws_theta;
 
 	// warm-start given bundle using previous iterations
-	virtual void warmstart(bundle& bdl);
+	virtual void warmstart(bundle* bdl);
 
 	// storage of informations for warmstart
 	virtual void storageForWS(VectorXd&, VectorXd&, double);
@@ -157,8 +164,39 @@ public:
 
 	~rbsopb();
 
-	void setPrimalRecovery(bool b) { primal = b; };
-	void setWarmStart(bool b) { ws = b; };
+	// set type of primal recovery
+	// 0 : best-iterate, 1 : Dantzig-Wolfe-like
+	rbsopb* setPrimalRecovery(bool b);
+
+	// set if warm start is on or off
+	rbsopb* setWarmStart(bool b);
+
+	// set max number of cuts for the warm start
+	rbsopb* setMaxCutsWS(int nb);
+
+	// set maximum number of iterations for the bundle
+	rbsopb* setMaxInternIt(int nb);
+
+	// set maximum number of iterations for the algorithm
+	rbsopb* setMaxOuterIt(int nb);
+
+	// set precision for the bundle maximizing Θₖ(μ)
+	rbsopb* setInternPrec(double gap);
+
+	// set precision for the algorithm
+	rbsopb* setOuterPrec(double gap);
+
+	// set a time limit for the solver of each bundle iteration
+	rbsopb* setTimeLimit(double time);
+
+	// set a time limit for the dantzig-wolfe recovery
+	rbsopb* setPrimalTimeLimit(double time);
+
+	// set if verbose or not
+	// 0 : no text displayed
+	// 1 : general information for each steps
+	// 2 : complete information for each inner and outer steps
+	rbsopb* setVerbosity(int n);
 
 	virtual double solve(VectorXd&);
 

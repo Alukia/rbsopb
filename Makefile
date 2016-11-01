@@ -1,6 +1,6 @@
 # install directory of eigen and cplex
-EIGENPATH = PATH_TO/eigen_3.2.1
-CPLEXPATH = PATH_TO/cplex
+EIGENPATH = /home/nicolas/Applications/eigen_3.2.1
+CPLEXPATH = /home/nicolas/Applications/CPLEX/cplex
 CPLEX_LINK = $(CPLEXPATH)/lib/x86-64_linux/static_pic
 
 CXX = g++

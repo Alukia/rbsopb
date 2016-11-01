@@ -1,4 +1,4 @@
-#include "../src/rbsopb.h"
+#include "../src/rrbsopb.h"
 
 /*****************************************
  * solving                               *
@@ -10,7 +10,7 @@
  * φ(d,x) = max(c₁(∑ᵢxᵢ-d),c₂(∑ᵢxᵢ-d))   *
  *****************************************/
 
-int N = 5;
+int N = 8;
 double ax[] = {.1,.2,.3,.4,.5,.6,.7,.8};
 double bx[] = {-.1,.2,.3,.4,.3,.2,.2,.3};
 double cx[] = {.0,.1,.3,.5,.8,.9,.0,.0};
@@ -54,13 +54,16 @@ int main()
 	VectorXi ni = VectorXi::Constant(N, 1);
 
 	rbsopb pb(ni, f, psi);
+	pb.setPrimalRecovery(true)->setVerbosity(2);
 
 	VectorXd sol(N);
 	pb.solve(sol);
 	std::cout << "\nFinal result :" << std::endl;
 	std::cout << "   x = (" << sol.transpose() << ")" << std::endl;
 	double sumfi = 0.;
-	for(int i = 0; i < N; ++i) sumfi += ax[i]*sol(i)*sol(i) + bx[i]*sol(i) + cx[i];
+	for(int i = 0; i < N; ++i) {
+		sumfi += ax[i]*sol(i)*sol(i) + bx[i]*sol(i) + cx[i];
+	}
 	std::cout << "f(x) = " << sumfi << std::endl;
 	std::cout << "prod = " << sol.sum() << " vs. μ = " << mu << " & k = " << k << std::endl;
 	VectorXd tmp(N);

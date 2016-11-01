@@ -185,3 +185,16 @@ double cplexPB::solve(VectorXd& x) {
 	cpx_status = CPXgetobjval(env, lp, &obj);
 	return obj;
 }
+
+
+void cplexPB::setTolerance(double gap) {
+	cpx_status = CPXsetdblparam(env, CPX_PARAM_EPGAP, gap);
+}
+
+void cplexPB::setTimeLimit(double t) {
+	cpx_status = CPXsetdblparam(env, CPX_PARAM_TILIM, t);
+}
+
+void cplexPB::setVerbose(bool b) {
+	cpx_status = CPXsetintparam(env, CPX_PARAM_SCRIND, b ? CPX_ON : CPX_OFF);
+}

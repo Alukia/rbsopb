@@ -111,12 +111,11 @@ public:
 
 	double costForSchedule(VectorXd& x) { return x.dot(c); }
 
-	double solve(VectorXd& x,VectorXd& b,VectorXd& A) {
+	double solve(VectorXd& x, VectorXd& b, VectorXd& A) {
 		VectorXd c_tmp = c + b;
 		pb.setLinearObjective(c_tmp);
 		pb.setQuadraticObjective(A);
-		double f_tmp = pb.solve(x);
-		return f_tmp;
+		return pb.solve(x);
 	}
 };
 
@@ -177,7 +176,7 @@ double psi(VectorXd& x, VectorXd& g) {
 
 int main(int argc, char const *argv[])
 {
-	bool primal = false, ws = true, reg = true;
+	bool primal = false, ws = true, reg = false;
 	for(int i = 1; i < argc; ++i) {
 		std::string str = argv[i];
 		if(str == "-h") {
@@ -222,15 +221,8 @@ int main(int argc, char const *argv[])
 
 	// solving
 
-	rbsopb* pb;
-	if(reg) {
-		pb = new rrbsopb(ni, f, psi);
-	}
-	else {
-		pb = new rbsopb(ni, f, psi);
-	}
-	pb->setPrimalRecovery(primal); // Dantzig-wolfe
-	pb->setWarmStart(ws); // warm-start on
+	rbsopb* pb = reg ? new rrbsopb(ni, f, psi) : new rbsopb(ni, f, psi);
+	pb->setPrimalRecovery(primal)->setWarmStart(ws)->setVerbosity(2);
 
 	VectorXd sol(nbUnits*T);
 	pb->solve(sol);

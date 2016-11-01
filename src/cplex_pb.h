@@ -20,9 +20,6 @@
 #pragma GCC diagnostic pop
 #include "ilcplex/cplex.h"
 
-#define debug(s) std::cout << s << std::endl
-#define variable(s) std::cout <<#s<<":\n" << s << std::endl
-
 typedef Eigen::SparseMatrix<double> SpMat;
 
 using namespace Eigen;
@@ -76,6 +73,15 @@ public:
 
 	// add a linear constraint
 	void addConstraint(VectorXd& a, double b, char zsense = 'L');
+
+	// set tolerance for convergence
+	void setTolerance(double gap);
+
+	// set a time limit for the solver
+	void setTimeLimit(double t);
+
+	// set verbose on or off
+	void setVerbose(bool b);
 
 	// solve the optimization problem
 	double solve(VectorXd& x);

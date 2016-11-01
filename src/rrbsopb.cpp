@@ -7,10 +7,7 @@
 rrbsopb::rrbsopb(VectorXi &ni,
 	double(*fi)(int,VectorXd&,VectorXd&,VectorXd&),
 	double(*psi)(VectorXd&,VectorXd&)) :
-	rbsopb(ni, fi, psi), frac(.1), t(1000.)
-{
-	ws_y = MatrixXd::Zero(ws_nb,n);
-}
+	rbsopb(ni, fi, psi), frac(.1), t(10000.) { }
 
 rrbsopb::~rrbsopb() { }
 
@@ -25,15 +22,17 @@ double rrbsopb::thetak(VectorXd& mu, VectorXd& gmu,
 	int k = mu.size();
 	fx = VectorXd::Zero(m); // fx(i) = minₓᵢ fᵢ(xᵢ)
 	double minpart = 0.;
+	std::deque<VectorXd>* grads = psihat.constraints();
+	std::deque<double>* csts = psihat.subgradients();
 	for(int i = 0; i < m; ++i) {
 		int deb = sumpni(i), nb = ni(i);
 		VectorXd xi(nb);
-		// note : cplex automatically add a .5 factor
+		// reminder : cplex automatically add a .5 factor
 		VectorXd A = VectorXd::Constant(nb, 1./t);
 		VectorXd b = VectorXd::Zero(nb); // ∑ₗ μₗgᵢˡ
+		std::deque<VectorXd>::iterator it_g = grads->begin();
 		for(int l = 0; l < k; ++l) {
-			VectorXd g(nb);
-			psihat.getSubgradient(l,deb,nb,g);
+			VectorXd g = it_g++->segment(deb,nb);
 			b += mu(l)*g;
 		}
 		b -= 1./t*y.segment(deb,nb);
@@ -45,10 +44,11 @@ double rrbsopb::thetak(VectorXd& mu, VectorXd& gmu,
 	// value : constant part ∑ₗ μₗ(Ψ(xˡ) - <gˡ, xˡ>) + 1/(2tₖ)yₖᵀyₖ
 	double cstpart = .5/t*y.squaredNorm();
 	// subgradient : (Ψ(xˡ) + <gˡ, x(μ)-xˡ>)ₗᵀ ∈ ∂Θₖ(μ)
+	std::deque<VectorXd>::iterator it_g = grads->begin();
+	std::deque<double>::iterator it_c = csts->begin();
 	for(int l = 0; l < k; ++l) {
-		double cst = -psihat.getConstant(l); // Ψ(xˡ) - <gˡ, xˡ>
-		VectorXd g(n);
-		psihat.getSubgradient(l,0,n,g);
+		double cst = -*it_c++; // Ψ(xˡ) - <gˡ, xˡ>
+		VectorXd g = it_g++->segment(0,n);
 		gmu(l) = cst + x.dot(g);
 		cstpart += mu(l)*cst;
 	}
@@ -56,64 +56,72 @@ double rrbsopb::thetak(VectorXd& mu, VectorXd& gmu,
 	return minpart + cstpart;
 }
 
-void rrbsopb::warmstart(bundle& bdl) {
+void rrbsopb::warmstart(bundle* bdl) {
 	int k = psihat.numberOfCuts();
-	for(int l = 0; l < ws_n && l < ws_nb; ++l) {
-		VectorXd mul = ws_mu.block(l,0,1,k).transpose();
-		VectorXd xmul = ws_x.row(l);
+	std::deque<VectorXd>* grads = psihat.constraints();
+	std::deque<double>* csts = psihat.subgradients();
+	std::deque<VectorXd>::iterator it_mu = ws_mu.begin();
+	std::deque<VectorXd>::iterator it_x = ws_x.begin();
+	std::deque<VectorXd>::iterator it_y = ws_y.begin();
+	std::deque<double>::iterator it_theta = ws_theta.begin();
+	// for each intern steps
+	for(int l = 0; l < std::min(ws_n,ws_nb); ++l) {
+		VectorXd mul = VectorXd::Zero(k);
+		for(int i = 0; i < it_mu->rows(); ++i)
+			mul(i) = (*it_mu)(i);
+		it_mu++;
+		VectorXd xmul = *(it_x++);
 		VectorXd g(k);
+		std::deque<VectorXd>::iterator it_g = grads->begin();
+		std::deque<double>::iterator it_c = csts->begin();
+		// for each outer steps
 		for(int i = 0; i < k; ++i) {
-			double cst = -psihat.getConstant(i);
-			VectorXd gl(n);
-			psihat.getSubgradient(i,0,n,gl);
-			g(i) = cst + xmul.dot(gl);
+			VectorXd gl = (it_g++)->segment(0,n);
+			g(i) = -*(it_c++) + xmul.dot(gl);
 		}
-		VectorXd yl = ws_y.row(l);
-		double theta = ws_theta(l) + .5/t*(
+		VectorXd yl = *(it_y++);
+		double theta = *(it_theta++) + .5/t*(
 			(xmul-y).squaredNorm()-(xmul-yl).squaredNorm()
 		);
-		bdl.addCut(mul, theta, g);
+		bdl->addCut(mul, theta, g);
 	}
 }
 
 void rrbsopb::storageForWS(VectorXd& mu,
 	VectorXd& x, double theta)
 {
-	int k = psihat.numberOfCuts();
-	ws_mu.block(ws_k,0,1,k) = mu.transpose();
-	ws_x.row(ws_k) = x;
-	ws_y.row(ws_k) = y;
-	ws_theta(ws_k) = theta;
-	ws_k = (ws_k+1)%ws_nb;
-	ws_n++;
+	ws_y.push_front(y);
+	rbsopb::storageForWS(mu, x, theta);
 }
 
 double rrbsopb::bestIterate(MatrixXd& xj,
 	MatrixXd& fj, VectorXd& x)
 {
-	debug("step 2 : Primal recovery (best iterate)");
+	debug(1, "step 2 : Primal recovery (best iterate)");
 	int nbCuts = fj.rows();
 	x = xj.row(0);
 	double best_obj = fj.row(0).sum() + psihat.eval(x)
-		+ .5/t*x.squaredNorm();
+		+ .5/t*(x-y).squaredNorm();
 	for(int j = 1; j < nbCuts; ++j) {
 		VectorXd xtmp = xj.row(j);
 		double ftmp = fj.row(j).sum() + psihat.eval(xtmp)
-			+ .5/t*xtmp.squaredNorm();
+			+ .5/t*(xtmp-y).squaredNorm();
 		if(ftmp < best_obj) {
 			x = xtmp;
 			best_obj = ftmp;
 		}
 	}
+	double tmp = best_obj - .5/t*(x-y).squaredNorm();
 	return best_obj - psihat.eval(x);
 }
 
 double rrbsopb::dantzigWolfe(MatrixXd& xj,
 	MatrixXd& fj, VectorXd& x)
 {
-	debug("step 2 : Primal recovery (Dantzig-Wolfe like)");
+	debug(1, "step 2 : Primal recovery (Dantzig-Wolfe like)");
 	int L = xj.rows();
 	cplexPB pr(L*m+n+1);
+	pr.setTimeLimit(primalMaxTime);
 	for(int i = 0; i < L*m; ++i)
 		pr.setToBinary(i);
 	// linear objective
@@ -143,18 +151,19 @@ double rrbsopb::dantzigWolfe(MatrixXd& xj,
 		}
 	// copy constraint of psihat bundle
 	int K = psihat.numberOfCuts();
+	std::deque<VectorXd>::iterator it_g = psihat.constraints()->begin();
+	std::deque<double>::iterator it_c = psihat.subgradients()->begin();
 	for(int i = 0; i < K; ++i) {
 		VectorXd b = VectorXd::Zero(L*m+n+1);
-		VectorXd g(n);
-		psihat.getSubgradient(i,0,n,g);
-		b.segment(L*m,n) = g;
+		b.segment(L*m,n) = it_g++->segment(0,n);
 		b(L*m+n) = -1.;
-		pr.addConstraint(b, psihat.getConstant(i), 'L');
+		pr.addConstraint(b, *it_c++, 'L');
 	}
 	// solve
 	VectorXd sol(L*m+n+1);
 	double tmp = pr.solve(sol);
 	x = sol.segment(L*m, n);
+	tmp = tmp + 1./t*y.dot(x) - .5/t*x.squaredNorm();
 	return tmp - psihat.eval(x);
 }
 
@@ -162,23 +171,23 @@ double rrbsopb::dantzigWolfe(MatrixXd& xj,
 bool rrbsopb::stoppingTest(double psi,
 	double psihat, double f, double theta, VectorXd& x)
 {
-	debug("step 4 : Stopping test");
+	debug(1, "step 4 : Stopping test");
 	double diff = objy - (f+psihat);
 	double diffrel = diff / abs(objy);
 	double quad = .5*1./t *(x-y).squaredNorm();
-	debug("     Θₖ(μ) = " << theta);
-	debug("      f(x) = " << f);
-	debug("    psi(x) = " << psi);
-	debug(" psihat(x) = " << psihat);
-	debug(" jump dual = " << f + psihat + quad - theta);
-	debug("    deltak = " << diffrel);
-	debug(" err.  Δₖᴬ = " << f + psi + quad - theta);
-	if(objy - (f+psi) >= frac*diff) {
-		debug(" update of the stability center");
+	debug(0, "     Θₖ(μ) = " << theta);
+	debug(0, "      f(x) = " << f);
+	debug(0, "    psi(x) = " << psi);
+	debug(0, " psihat(x) = " << psihat);
+	debug(0, " jump dual = " << f + psihat + quad - theta);
+	debug(0, "    deltak = " << diffrel);
+	debug(0, " err.  Δₖᴬ = " << f + psi + quad - theta);
+	if( f+psi <= objy - frac*diff) {
+		debug(1, " update of the stability center");
 		y = x;
 		objy = f+psi;
 	}
-	return diffrel < tol;
+	return diffrel < tolOuter;
 }
 
 double rrbsopb::solve(VectorXd& x) {
@@ -189,18 +198,15 @@ double rrbsopb::solve(VectorXd& x) {
 	y = xkp1;
 	objy = obj;
 	// principal loop
-	for(int i = 0; i < maxIter; ++i) {
-		debug("\nIteration n°" << i);
+	for(int i = 0; i < maxOuterIt; ++i) {
+		debug(0, "\nIteration n°" << i);
 		// step 1 : Lagrangian dual
 		MatrixXd xj;
 		MatrixXd fj;
 		double theta = maximizeThetak(xj, fj);
 		// step 2 : Primal recovery
-		if(primal) {
-			f = dantzigWolfe(xj, fj, xkp1);
-		} else {
-			f = bestIterate(xj, fj, xkp1);
-		}
+		if(primal) f = dantzigWolfe(xj, fj, xkp1);
+		else f = bestIterate(xj, fj, xkp1);
 		// step 3 : Oracle call
 		double psihatskp1 = psihat.eval(xkp1);
 		psixkp1 = oracleCall(xkp1);
@@ -208,7 +214,19 @@ double rrbsopb::solve(VectorXd& x) {
 		if(stoppingTest(psixkp1, psihatskp1, f, theta, xkp1))
 			break;
 	}
+	debug(0, "Number of oracle calls : " << nbOracleCall);
 	x = xkp1;
 	obj = f + psixkp1;
 	return obj;
 }
+
+/***********
+ * SETTERS *
+ **********/
+
+#define SETTER(a,b,c) rrbsopb* rrbsopb::set##a(b tmp) { \
+    c = tmp; \
+    return this; \
+}
+SETTER(DecreaseFraction, double, frac)
+SETTER(ProximalParameter, double, t)

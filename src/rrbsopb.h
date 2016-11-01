@@ -44,14 +44,14 @@ protected:
 	double objy; // (f+Ψ)(yₖ)
 
 	// variables for warm-start
-	MatrixXd ws_y;
+	std::deque<VectorXd> ws_y;
 
 	// compute Θₖ(μ)
 	virtual double thetak(VectorXd& mu, VectorXd& gmu,
 		VectorXd& x, VectorXd& fx);
 
 	// warm-start
-	virtual void warmstart(bundle& bdl);
+	virtual void warmstart(bundle* bdl);
 	// storage for warmstart
 	virtual void storageForWS(VectorXd&, VectorXd&, double);
 
@@ -73,6 +73,13 @@ public:
 		double(*psi)(VectorXd&,VectorXd&));
 
 	~rrbsopb();
+
+	// set decreased fraction for update of stability center
+	rrbsopb* setDecreaseFraction(double);
+
+	// set proximal
+	rrbsopb* setProximalParameter(double);
+
 
 	virtual double solve(VectorXd&);
 

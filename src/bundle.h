@@ -1,5 +1,6 @@
 #pragma once
 
+#include <deque>
 #include "cplex_pb.h"
 
 /**************************************
@@ -38,8 +39,8 @@ protected:
 	int m; // number of cuts
 	bool convex; // is f(x) convex or concave
 	cplexPB pb;
-	MatrixXd cutsA; // cutsA(i) = (aᵢ,-1)ᵀ
-	VectorXd cutsb; // cutsb(i) = -bᵢ
+	std::deque<VectorXd> cutsA; // cutsA(i) = (aᵢ,-1)ᵀ
+	std::deque<double> cutsb; // cutsb(i) = -bᵢ
 
 	void init(int N);
 
@@ -57,8 +58,8 @@ public:
 	bundle(int n, VectorXd&, VectorXd&);
 
 	// change to concave or convex function
-	void setConvex()  { convex = true;  pb.chgobjsen(CPX_MIN); };
-	void setConcave() { convex = false; pb.chgobjsen(CPX_MAX); };
+	virtual void setConvex();
+	virtual void setConcave();
 
 	// save the bundle problem to a file
 	void saveProblem(std::string name);
@@ -76,10 +77,20 @@ public:
 	// add a new linear constraint on x
 	void addConstraint(VectorXd &a, double b, char zsense = 'L');
 
-	// return the coefficients [deb,deb+nb] of the i-th subgradient
-	void getSubgradient(int i, int deb, int nb, VectorXd& g);
-	// return the constant value of the i-th constraint
-	double getConstant(int i);
+	// coefficients of the subgradients
+	std::deque<VectorXd>* constraints() { return &cutsA; }
+	// constant value of the constraints
+	std::deque<double>* subgradients() { return &cutsb; }
+
+	// // return the coefficients [deb,deb+nb] of the i-th subgradient
+	// void getSubgradient(int i, int deb, int nb, VectorXd& g);
+	// // return the constant value of the i-th constraint
+	// double getConstant(int i);
+
+	// set verbosity of the solver
+	void setVerbose(bool b) { pb.setVerbose(b); }
+	// set time limit for each iteration
+	void setTimeLimit(double t) { pb.setTimeLimit(t); }
 
 	// return current number of cuts
 	int numberOfCuts() { return m; };
