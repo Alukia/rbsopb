@@ -64,6 +64,9 @@
  *   otherwise k ← k+1 and return in step 2  *
  *********************************************/
 
+// primal recovery types
+enum prType {PSEUDO_SCHEDULE, BEST_ITERATE, DANTZIG_WOLFE};
+
 #define debug(n,s) if(verbosity >= n) std::cout << s << std::endl
 
 class rbsopb {
@@ -77,10 +80,9 @@ protected:
 	double maxTime; // max time for each steps of the bundle
 	int verbosity; // verbosity level
 	double primalMaxTime; // primal recovery max time to solve
-	bool primal; // true : dantzig-wolfe, false : best iterate
-	bool ws;     // warm start ?
-	int ws_nb;   // max number of warm-start cuts 
-	int ws_n;    // number of warm-start cuts
+	prType primal; // pseudo-schedule, best_iterate or dantzig-wolfe
+	bool ws;  // warm start ?
+	int ws_n; // number of warm-start cuts
 
 	int n; // number of variables for x
 	int m; // number of blocks
@@ -122,16 +124,25 @@ protected:
 	// storage of informations for warmstart
 	virtual void storageForWS(VectorXd&, VectorXd&, double);
 
+	// variables for primal recovery
+	std::deque<VectorXd> pr_xj;
+	std::deque<VectorXd> pr_fj;
+	VectorXd pr_alp;
+
 	// step 1 : lagrangian dual
-	// xj contain all the admissible x obtained during
-	// the maximization of the dual with fj(j) = f(xj.row(j))
-	double maximizeThetak(MatrixXd& xj, MatrixXd& fj);
+	double maximizeThetak();
+
+	// step 2 : Primal recovery (pseudo schedule)
+	// (!) only if all the Xᵢ are convex
+	// use a convex combinations of the xᵢ found during
+	// dual maximization with coefficients given by the
+	// dual multipliers
+	virtual double pseudoSchedule(VectorXd& x);
 
 	// step 2 : Primal recovery (best iterate)
 	// return the best iterate (least value of f+Φ) from
 	// the L admissible xₗ found during dual maximization
-	virtual double bestIterate(MatrixXd& xj,
-		MatrixXd& fj, VectorXd& x);
+	virtual double bestIterate(VectorXd& x);
 
 	// step 2 : Primal recovery (Dantzig-Wolfe like)
 	// knowing L admissible xˡ found during dual maximization
@@ -145,8 +156,7 @@ protected:
 	//         ∀i, (aᵢ,-1)ᵀ (x,r) ≤ -bᵢ
 	//         
 	// for which very efficient greedy heuristics exist.
-	virtual double dantzigWolfe(MatrixXd& xj,
-		MatrixXd& fj, VectorXd& x);
+	//virtual double dantzigWolfe(VectorXd& x);
 
 	// step 3 : oracle call
 	// return Ψ(x) and add a new cut
@@ -155,6 +165,11 @@ protected:
 	// step 4 : stopping test
 	// params : Ψ(xₖ₊₁), Φ(xₖ₊₁), f(xₖ₊₁), Θₖ(μₖ₊₁)
 	virtual bool stoppingTest(double, double, double, double);
+
+	// write logs about values of f, Ψ, the duality gap,
+	// the number of inner iterations and the delta for
+	// the stopping test
+	void writeLogs(std::string name);
 
 public:
 
@@ -166,7 +181,7 @@ public:
 
 	// set type of primal recovery
 	// 0 : best-iterate, 1 : Dantzig-Wolfe-like
-	rbsopb* setPrimalRecovery(bool b);
+	rbsopb* setPrimalRecovery(prType b);
 
 	// set if warm start is on or off
 	rbsopb* setWarmStart(bool b);

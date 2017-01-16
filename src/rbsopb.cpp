@@ -8,8 +8,8 @@ rbsopb::rbsopb(VectorXi &ni,
 	double(*fi)(int,VectorXd&,VectorXd&,VectorXd&),
 	double(*psi)(VectorXd&,VectorXd&)) :
 	maxInternIt(1000), maxOuterIt(1000), tolIntern(1e-5), tolOuter(1e-5),
-	maxTime(5.), verbosity(1), primalMaxTime(5.), primal(true),
-	ws(true), ws_nb(100), ws_n(0), nbOracleCall(0),
+	maxTime(5.), verbosity(1), primalMaxTime(5.), primal(BEST_ITERATE),
+	ws(true), ws_n(0), nbOracleCall(0),
 	ni(ni), fi(fi), psi(psi), psihat(ni.sum())
 {
 	m = ni.size();
@@ -111,7 +111,7 @@ void rbsopb::warmstart(bundle* bdl) {
 	std::deque<VectorXd>::iterator it_x = ws_x.begin();
 	std::deque<double>::iterator it_theta = ws_theta.begin();
 	// for each intern steps
-	for(int l = 0; l < std::min(ws_n,ws_nb); ++l) {
+	for(int l = 0; l < ws_n; ++l) {
 		VectorXd mul = VectorXd::Zero(k);
 		for(int i = 0; i < it_mu->rows(); ++i)
 			mul(i) = (*it_mu)(i);
@@ -132,26 +132,22 @@ void rbsopb::warmstart(bundle* bdl) {
 void rbsopb::storageForWS(VectorXd& mu,
 	VectorXd& x, double theta)
 {
-	ws_mu.push_front(mu);
-	ws_x.push_front(x);
-	ws_theta.push_front(theta);
+	ws_mu.push_back(mu);
+	ws_x.push_back(x);
+	ws_theta.push_back(theta);
 	ws_n++;
 }
 
-double rbsopb::maximizeThetak(MatrixXd& xj, MatrixXd& fj)
+double rbsopb::maximizeThetak()
 {
 	debug(1, "step 1 : Lagrangian dual");
 	int k = psihat.numberOfCuts();
 	VectorXd z = VectorXd::Zero(k);
 	VectorXd o = VectorXd::Constant(k,  1.);
-	bundle* bundleThetaK = new rbundle(k, z, o);
+	bundle* bundleThetaK = new bundle(k, z, o); // rbundle
 	bundleThetaK->setTimeLimit(maxTime);
 	bundleThetaK->setConcave();
 	bundleThetaK->addConstraint(o, 1., 'E');
-
-	xj = MatrixXd::Zero(maxInternIt,n);
-	fj = MatrixXd::Zero(maxInternIt,m);
-	int nbj = 0;
 
 	if(ws && ws_n != 0) {
 		// We want to warm-start the bundle with
@@ -173,25 +169,26 @@ double rbsopb::maximizeThetak(MatrixXd& xj, MatrixXd& fj)
 		double theta0 = thetak(mu0, g0, x0, fx0);
 		nbOracleCall++;
 
-		xj.row(nbj) = x0;
-		fj.row(nbj) = fx0;
-		nbj++;
+		pr_xj.clear();
+		pr_fj.clear();
+		pr_xj.push_back(x0);
+		pr_fj.push_back(fx0);
 
 		debug(2, " " << "(0)" << " Θₖ(μ) = " << theta0);
 		bundleThetaK->addCut(mu0, theta0, g0);
+
+		if(ws) storageForWS(mu0, x0, theta0);
 	}
 
 	VectorXd mujp1(k), gjp1(k), xjp1(n);
 	double theta;
 	for(int j = 1; j < maxInternIt; ++j) {
-		bundleThetaK->solve(mujp1);
+		VectorXd alp = VectorXd::Zero(bundleThetaK->numberOfCuts());
+		bundleThetaK->solveWithDual(mujp1, alp);
+		pr_alp = alp;
 		VectorXd fxjp1;
 		theta = thetak(mujp1, gjp1, xjp1, fxjp1);
 		nbOracleCall++;
-
-		xj.row(nbj) = xjp1;
-		fj.row(nbj) = fxjp1;
-		nbj++;
 
 		double thetahat = bundleThetaK->eval(mujp1);
 		double rel = (thetahat-theta)/abs(thetahat);
@@ -199,28 +196,47 @@ double rbsopb::maximizeThetak(MatrixXd& xj, MatrixXd& fj)
 			" Θₖ(μ) = " << theta << ", hat(Θₖ)(μ) = "
 			<< thetahat << ", rel. dist = " << rel);
 		if(rel < tolIntern) break;
+		pr_xj.push_back(xjp1);
+		pr_fj.push_back(fxjp1);
+
 		bundleThetaK->addCut(mujp1, theta, gjp1);
 
 		// storage of value for warm-start
-		if(ws) {
-			storageForWS(mujp1, xjp1, theta);
-		}
+		if(ws) storageForWS(mujp1, xjp1, theta);
 	}
-	xj.conservativeResize(nbj, n);
-	fj.conservativeResize(nbj, m);
 	return theta;
 }
 
-double rbsopb::bestIterate(MatrixXd& xj,
-	MatrixXd& fj, VectorXd& x)
+double rbsopb::pseudoSchedule(VectorXd& x)
+{
+	debug(1, "step 2 : Primal recovery (pseudo schedule)");
+
+	std::deque<VectorXd>::iterator xj = pr_xj.begin();
+	std::deque<VectorXd>::iterator fj = pr_fj.begin();
+	int L = pr_alp.rows();
+
+	x = VectorXd::Zero(n);
+	double f = 0.;
+	for(int i = 0; i < L; ++i) {
+		x += (xj++)->transpose() * pr_alp(i);
+		f += (fj++)->sum() * pr_alp(i);
+	}
+	return f;
+}
+
+double rbsopb::bestIterate(VectorXd& x)
 {
 	debug(1, "step 2 : Primal recovery (best iterate)");
-	int nbCuts = fj.rows();
-	x = xj.row(0);
-	double best_obj = fj.row(0).sum() + psihat.eval(x);
-	for(int j = 1; j < nbCuts; ++j) {
-		VectorXd xtmp = xj.row(j);
-		double ftmp = fj.row(j).sum() + psihat.eval(xtmp);
+
+	std::deque<VectorXd>::iterator xj = pr_xj.begin();
+	std::deque<VectorXd>::iterator fj = pr_fj.begin();
+	int L = pr_alp.rows();
+
+	x = *(xj++);
+	double best_obj = (fj++)->sum() + psihat.eval(x);
+	for(int j = 1; j < L; ++j) {
+		VectorXd& xtmp = *(xj++);
+		double ftmp = (fj++)->sum() + psihat.eval(xtmp);
 		if(ftmp < best_obj) {
 			x = xtmp;
 			best_obj = ftmp;
@@ -229,55 +245,57 @@ double rbsopb::bestIterate(MatrixXd& xj,
 	return best_obj - psihat.eval(x);
 }
 
-double rbsopb::dantzigWolfe(MatrixXd& xj,
-	MatrixXd& fj, VectorXd& x)
-{
-	debug(1, "step 2 : Primal recovery (Dantzig-Wolfe like)");
+// double rbsopb::dantzigWolfe(VectorXd& x)
+// {
+// 	debug(1, "step 2 : Primal recovery (Dantzig-Wolfe like)");
 
-	int L = xj.rows();
-	cplexPB pr(L*m+n+1);
-	pr.setTimeLimit(primalMaxTime);
-	for(int i = 0; i < L*m; ++i)
-		pr.setToBinary(i);
-	// linear objective
-	VectorXd c(L*m+n+1);
-	VectorXd f = VectorXd::Zero(L*m);
-	for(int i = 0; i < m; ++i) {
-		f.segment(i*L,L) = fj.col(i);
-	}
-	c << f, VectorXd::Zero(n), 1.;
-	pr.setLinearObjective(c);
-	// constraint sum for each group
-	for(int i = 0; i < m; ++i) {
-		VectorXd b = VectorXd::Zero(L*m+n+1);
-		b.segment(i*L,L) = VectorXd::Constant(L, 1.);
-		pr.addConstraint(b, 1., 'E');
-	}
-	// constraint for xi
-	for(int i = 0; i < m; ++i)
-		for(int j = 0; j < ni(i); ++j) {
-			int k = sumpni(i)+j;
-			VectorXd b = VectorXd::Zero(L*m+n+1);
-			b(L*m+k) = -1.;
-			b.segment(i*L,L) = xj.col(k);
-			pr.addConstraint(b, 0., 'E');
-		}
-	// copy constraint of psihat bundle
-	int K = psihat.numberOfCuts();
-	std::deque<VectorXd>::iterator it_g = psihat.constraints()->begin();
-	std::deque<double>::iterator it_c = psihat.subgradients()->begin();
-	for(int i = 0; i < K; ++i) {
-		VectorXd b = VectorXd::Zero(L*m+n+1);
-		b.segment(L*m,n) = (it_g++)->segment(0,n);
-		b(L*m+n) = -1.;
-		pr.addConstraint(b, *(it_c++), 'L');
-	}
-	// solve
-	VectorXd sol(L*m+n+1);
-	double tmp = pr.solve(sol);
-	x = sol.segment(L*m, n);
-	return tmp - sol(L*m+n);
-}
+// 	std::deque<VectorXd>::iterator xj = pr_xj.begin();
+// 	std::deque<VectorXd>::iterator fj = pr_fj.begin();
+// 	int L = pr_alp.rows();
+
+// 	cplexPB pr(L*m+n+1);
+// 	pr.setTimeLimit(primalMaxTime);
+// 	for(int i = 0; i < L*m; ++i)
+// 		pr.setToBinary(i);
+// 	// linear objective
+// 	VectorXd c(L*m+n+1);
+// 	VectorXd f = VectorXd::Zero(L*m);
+// 	for(int i = 0; i < m; ++i) {
+// 		f.segment(i*L,L) = *(fj++);
+// 	}
+// 	c << f, VectorXd::Zero(n), 1.;
+// 	pr.setLinearObjective(c);
+// 	// constraint sum for each group
+// 	for(int i = 0; i < m; ++i) {
+// 		VectorXd b = VectorXd::Zero(L*m+n+1);
+// 		b.segment(i*L,L) = VectorXd::Constant(L, 1.);
+// 		pr.addConstraint(b, 1., 'E');
+// 	}
+// 	// constraint for xi
+// 	for(int i = 0; i < m; ++i)
+// 		for(int j = 0; j < ni(i); ++j) {
+// 			int k = sumpni(i)+j;
+// 			VectorXd b = VectorXd::Zero(L*m+n+1);
+// 			b(L*m+k) = -1.;
+// 			b.segment(i*L,L) = *(xj++);
+// 			pr.addConstraint(b, 0., 'E');
+// 		}
+// 	// copy constraint of psihat bundle
+// 	int K = psihat.numberOfCuts();
+// 	std::deque<VectorXd>::iterator it_g = psihat.constraints()->begin();
+// 	std::deque<double>::iterator it_c = psihat.subgradients()->begin();
+// 	for(int i = 0; i < K; ++i) {
+// 		VectorXd b = VectorXd::Zero(L*m+n+1);
+// 		b.segment(L*m,n) = (it_g++)->segment(0,n);
+// 		b(L*m+n) = -1.;
+// 		pr.addConstraint(b, *(it_c++), 'L');
+// 	}
+// 	// solve
+// 	VectorXd sol(L*m+n+1);
+// 	double tmp = pr.solve(sol);
+// 	x = sol.segment(L*m, n);
+// 	return tmp - sol(L*m+n);
+// }
 
 double rbsopb::oracleCall(VectorXd& x) {
 	debug(1, "step 3 : Oracle call");
@@ -304,20 +322,25 @@ bool rbsopb::stoppingTest(double psi,
 }
 
 double rbsopb::solve(VectorXd& x) {
-	VectorXd xkp1(n);
+	VectorXd xkp1 = VectorXd::Zero(n);
 	double obj, psixkp1, f;
 	// step 0 : Initialization
-	obj = initialize(3, x);
+	obj = initialize(5, x);
 	// principal loop
 	for(int i = 0; i < maxOuterIt; ++i) {
 		debug(0, "\nIteration n°" << i);
 		// step 1 : Lagrangian dual
-		MatrixXd xj;
-		MatrixXd fj;
-		double theta = maximizeThetak(xj, fj);
+		double theta = maximizeThetak();
 		// step 2 : Primal recovery
-		if(primal) f = dantzigWolfe(xj, fj, xkp1);
-		else f = bestIterate(xj, fj, xkp1);
+		switch(primal) {
+			case BEST_ITERATE:
+				f = bestIterate(xkp1);
+			break;
+			case PSEUDO_SCHEDULE:
+				f = pseudoSchedule(xkp1);
+			break;
+		}
+		//if(primal) f = dantzigWolfe(xj, fj, xkp1);
 		// step 3 : Oracle call
 		double psihatskp1 = psihat.eval(xkp1);
 		psixkp1 = oracleCall(xkp1);
@@ -339,9 +362,8 @@ double rbsopb::solve(VectorXd& x) {
     c = tmp; \
     return this; \
 }
-SETTER(PrimalRecovery, bool, primal)
+SETTER(PrimalRecovery, prType, primal)
 SETTER(WarmStart, bool, ws)
-SETTER(MaxCutsWS, int, ws_nb)
 SETTER(MaxInternIt, int, maxInternIt)
 SETTER(MaxOuterIt, int, maxOuterIt)
 SETTER(InternPrec, double, tolIntern)

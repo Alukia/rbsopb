@@ -54,7 +54,7 @@ int main()
 	VectorXi ni = VectorXi::Constant(N, 1);
 
 	rbsopb pb(ni, f, psi);
-	pb.setPrimalRecovery(true)->setVerbosity(2);
+	pb.setPrimalRecovery(PSEUDO_SCHEDULE)->setVerbosity(2);
 
 	VectorXd sol(N);
 	pb.solve(sol);

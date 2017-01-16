@@ -85,5 +85,7 @@ public:
 
 	// solve the optimization problem
 	double solve(VectorXd& x);
+	// solve the optimization problem and recover dual variables
+	double solveWithDual(VectorXd& x, VectorXd& xDual);
 
 };

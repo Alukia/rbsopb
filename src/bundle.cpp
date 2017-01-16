@@ -67,8 +67,17 @@ double bundle::eval(VectorXd& x) {
 }
 
 double bundle::solve(VectorXd& x) {
-	VectorXd xr(n+1);
+	VectorXd xr = VectorXd::Zero(n+1);
+	VectorXd xDual = VectorXd::Zero(m+1);
 	double sol = pb.solve(xr);
+	x = xr.segment(0,n);
+	return sol;
+}
+double bundle::solveWithDual(VectorXd& x, VectorXd& xDual) {
+	VectorXd xr = VectorXd::Zero(n+1);
+	VectorXd xDualr = VectorXd::Zero(m+1);
+	double sol = pb.solveWithDual(xr, xDualr);
+	xDual = -xDualr.segment(1,m);
 	x = xr.segment(0,n);
 	return sol;
 }

@@ -185,7 +185,11 @@ double cplexPB::solve(VectorXd& x) {
 	cpx_status = CPXgetobjval(env, lp, &obj);
 	return obj;
 }
-
+double cplexPB::solveWithDual(VectorXd& x, VectorXd& xDual) {
+	double obj = solve(x);
+	cpx_status = CPXgetpi(env, lp, xDual.data(), 0, m-1);
+	return obj;
+}
 
 void cplexPB::setTolerance(double gap) {
 	cpx_status = CPXsetdblparam(env, CPX_PARAM_EPGAP, gap);

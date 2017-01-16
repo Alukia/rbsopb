@@ -73,6 +73,9 @@ public:
 
 	// find the minimum of the cutting-plane model
 	virtual double solve(VectorXd& x);
+	// find the minimum of the cutting-plane model
+	// and gives dual multipliers
+	virtual double solveWithDual(VectorXd& x, VectorXd& xDual);
 
 	// add a new linear constraint on x
 	void addConstraint(VectorXd &a, double b, char zsense = 'L');

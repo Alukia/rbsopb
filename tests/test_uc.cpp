@@ -112,6 +112,7 @@ public:
 	double costForSchedule(VectorXd& x) { return x.dot(c); }
 
 	double solve(VectorXd& x, VectorXd& b, VectorXd& A) {
+		//std::cout << b.transpose() << "\n\n";
 		VectorXd c_tmp = c + b;
 		pb.setLinearObjective(c_tmp);
 		pb.setQuadraticObjective(A);
@@ -176,15 +177,17 @@ double psi(VectorXd& x, VectorXd& g) {
 
 int main(int argc, char const *argv[])
 {
-	bool primal = false, ws = true, reg = false;
+	bool ws = true, reg = false;
+	prType primal = PSEUDO_SCHEDULE;
 	for(int i = 1; i < argc; ++i) {
 		std::string str = argv[i];
 		if(str == "-h") {
 			std::cout <<
 			"Example of a basic unit-commitment problem\n"
 			" Primal recovery\n"
-			"  -bi  best-iterate [default]\n"
-			"  -dw  dantzig-wolfe-like\n"
+			"  -ps  pseudo-schedule [default]\n"
+			"  -bi  best-iterate\n"
+			//"  -dw  dantzig-wolfe-like\n"
 			" Warm-start\n"
 			"  -ws  on [default]\n"
 			"  -nws off\n"
@@ -194,8 +197,9 @@ int main(int argc, char const *argv[])
 			<< std::endl;
 			exit(0);
 		}
-		else if(str == "-dw")  primal = true;
-		else if(str == "-bi")  primal = false;
+		//else if(str == "-dw")  primal = DANTZIG_WOLFE;
+		else if(str == "-bi")  primal = BEST_ITERATE;
+		else if(str == "-ps")  primal = PSEUDO_SCHEDULE;
 		else if(str == "-ws")  ws = true;
 		else if(str == "-nws") ws = false;
 		else if(str == "-nr")  reg = false;
@@ -213,7 +217,7 @@ int main(int argc, char const *argv[])
 		unit(T, 200., 40., 0., 20.),
 		unit(T, 200., 40., 0., 20.),
 		unit(T, 200., 40., 0., 20.),
-		unit(T, 100., 20., 0., 10.)
+		unit(T, 100., 20., 0., 10.),
 	};
 	nbUnits = sizeof(U)/sizeof(unit);
 	units = U;
