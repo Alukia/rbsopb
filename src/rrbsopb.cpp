@@ -7,7 +7,7 @@
 rrbsopb::rrbsopb(VectorXi &ni,
 	double(*fi)(int,VectorXd&,VectorXd&,VectorXd&),
 	double(*psi)(VectorXd&,VectorXd&)) :
-	rbsopb(ni, fi, psi), frac(.1), t(1e6) { }
+	rbsopb(ni, fi, psi), frac(.1), t(1e5) { }
 
 rrbsopb::~rrbsopb() { }
 
@@ -94,29 +94,31 @@ void rrbsopb::storageForWS(VectorXd& mu,
 	rbsopb::storageForWS(mu, x, theta);
 }
 
-// double rrbsopb::bestIterate(MatrixXd& xj,
-// 	MatrixXd& fj, VectorXd& x)
-// {
-// 	debug(1, "step 2 : Primal recovery (best iterate)");
-// 	int nbCuts = fj.rows();
-// 	x = xj.row(0);
-// 	double best_obj = fj.row(0).sum() + psihat.eval(x)
-// 		+ .5/t*(x-y).squaredNorm();
-// 	for(int j = 1; j < nbCuts; ++j) {
-// 		VectorXd xtmp = xj.row(j);
-// 		double ftmp = fj.row(j).sum() + psihat.eval(xtmp)
-// 			+ .5/t*(xtmp-y).squaredNorm();
-// 		if(ftmp < best_obj) {
-// 			x = xtmp;
-// 			best_obj = ftmp;
-// 		}
-// 	}
-// 	double tmp = best_obj - .5/t*(x-y).squaredNorm();
-// 	return best_obj - psihat.eval(x);
-// }
+double rrbsopb::bestIterate(VectorXd& x)
+{
+	debug(1, "step 2 : Primal recovery (best iterate)");
 
-// double rrbsopb::dantzigWolfe(MatrixXd& xj,
-// 	MatrixXd& fj, VectorXd& x)
+	std::deque<VectorXd>::iterator xj = pr_xj.begin();
+	std::deque<VectorXd>::iterator fj = pr_fj.begin();
+	int L = pr_alp.rows();
+
+	x = *(xj++);
+	double best_obj = (fj++)->sum() + psihat.eval(x)
+		+ .5/t*(x-y).squaredNorm();
+	for(int j = 1; j < L; ++j) {
+		VectorXd& xtmp = *(xj++);
+		double ftmp = (fj++)->sum() + psihat.eval(xtmp)
+			+ .5/t*(xtmp-y).squaredNorm();
+		if(ftmp < best_obj) {
+			x = xtmp;
+			best_obj = ftmp;
+		}
+	}
+	double tmp = best_obj - .5/t*(x-y).squaredNorm();
+	return best_obj - psihat.eval(x);
+}
+
+// double rrbsopb::dantzigWolfe(VectorXd& x)
 // {
 // 	debug(1, "step 2 : Primal recovery (Dantzig-Wolfe like)");
 // 	int L = xj.rows();
@@ -175,18 +177,27 @@ bool rrbsopb::stoppingTest(double psi,
 	double diff = objy - (f+psihat);
 	double diffrel = diff / abs(objy);
 	double quad = .5*1./t *(x-y).squaredNorm();
+	double gap = f + psihat + quad - theta;
+	double delta = f + psi + quad - theta;
 	debug(0, "     Θₖ(μ) = " << theta);
 	debug(0, "      f(x) = " << f);
 	debug(0, "    psi(x) = " << psi);
 	debug(0, " psihat(x) = " << psihat);
-	debug(0, " jump dual = " << f + psihat + quad - theta);
+	debug(0, " jump dual = " << gap);
 	debug(0, "    deltak = " << diffrel);
-	debug(0, " err.  Δₖᴬ = " << f + psi + quad - theta);
+	debug(0, " err.  Δₖᴬ = " << delta);
 	if( f+psi <= objy - frac*diff) {
 		debug(1, " update of the stability center");
 		y = x;
 		objy = f+psi;
 	}
+
+	// for logs
+	log_f.push_back(f);
+	log_psi.push_back(psi);
+	log_gap.push_back(gap);
+	log_delta.push_back(delta);
+
 	return diffrel < tolOuter;
 }
 
@@ -203,9 +214,15 @@ double rrbsopb::solve(VectorXd& x) {
 		// step 1 : Lagrangian dual
 		double theta = maximizeThetak();
 		// step 2 : Primal recovery
-		// if(primal) f = dantzigWolfe(xj, fj, xkp1);
-		// else f = bestIterate(xj, fj, xkp1);
-		f = pseudoSchedule(xkp1);
+		switch(primal) {
+			case BEST_ITERATE:
+				f = bestIterate(xkp1);
+			break;
+			case PSEUDO_SCHEDULE:
+				f = pseudoSchedule(xkp1);
+			break;
+		}
+		//f = bestIterate(xj, fj, xkp1);
 		// step 3 : Oracle call
 		double psihatskp1 = psihat.eval(xkp1);
 		psixkp1 = oracleCall(xkp1);

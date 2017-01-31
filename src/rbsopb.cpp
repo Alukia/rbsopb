@@ -182,7 +182,8 @@ double rbsopb::maximizeThetak()
 
 	VectorXd mujp1(k), gjp1(k), xjp1(n);
 	double theta;
-	for(int j = 1; j < maxInternIt; ++j) {
+	int j = 1;
+	for(; j < maxInternIt; ++j) {
 		VectorXd alp = VectorXd::Zero(bundleThetaK->numberOfCuts());
 		bundleThetaK->solveWithDual(mujp1, alp);
 		pr_alp = alp;
@@ -204,6 +205,8 @@ double rbsopb::maximizeThetak()
 		// storage of value for warm-start
 		if(ws) storageForWS(mujp1, xjp1, theta);
 	}
+	log_nb.push_back(j);
+
 	return theta;
 }
 
@@ -234,9 +237,11 @@ double rbsopb::bestIterate(VectorXd& x)
 
 	x = *(xj++);
 	double best_obj = (fj++)->sum() + psihat.eval(x);
+
 	for(int j = 1; j < L; ++j) {
 		VectorXd& xtmp = *(xj++);
 		double ftmp = (fj++)->sum() + psihat.eval(xtmp);
+
 		if(ftmp < best_obj) {
 			x = xtmp;
 			best_obj = ftmp;
@@ -311,13 +316,22 @@ bool rbsopb::stoppingTest(double psi,
 	debug(1, "step 4 : Stopping test");
 	double diff = psi - psihat;
 	double diffrel = diff / abs(f + psi);
+	double gap = f + psihat - theta;
+	double delta = f + psi - theta;
 	debug(0, "     Θₖ(μ) = " << theta);
 	debug(0, "      f(x) = " << f);
 	debug(0, "    psi(x) = " << psi);
 	debug(0, " psihat(x) = " << psihat);
-	debug(0, " jump dual = " << f + psihat - theta);
+	debug(0, " jump dual = " << gap);
 	debug(0, " rel. dist = " << diffrel);
-	debug(0, " err.  Δₖᴬ = " << f + psi - theta);
+	debug(0, " err.  Δₖᴬ = " << delta);
+
+	// for logs 
+	log_f.push_back(f);
+	log_psi.push_back(psi);
+	log_gap.push_back(gap);
+	log_delta.push_back(delta);
+
 	return diffrel < tolOuter;
 }
 
@@ -352,6 +366,30 @@ double rbsopb::solve(VectorXd& x) {
 	x = xkp1;
 	obj = f + psixkp1;
 	return obj;
+}
+
+void rbsopb::writeLogs(std::string name) {
+
+	std::deque<double>::iterator f = log_f.begin();
+	std::deque<double>::iterator psi = log_psi.begin();
+	std::deque<double>::iterator gap = log_gap.begin();
+	std::deque<double>::iterator delta = log_delta.begin();
+	std::deque<int>::iterator nb = log_nb.begin();
+
+	int n = log_f.size();
+	std::ofstream file;
+	file.open(name);
+	file << "f_values\tpsi_values\tdual_gap\terror_delta\tnb_it\n";
+	file << std::scientific;
+	for(int i = 0; i < n; ++i) {
+		file << *(f++) << "\t"
+		     << *(psi++) << "\t"
+		     << *(gap++) << "\t"
+		     << *(delta++) << "\t"
+		     << *(nb++) << "\n";
+	}
+	file.close();
+
 }
 
 /***********

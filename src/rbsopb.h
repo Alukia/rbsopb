@@ -1,5 +1,6 @@
 #pragma once
 
+#include <fstream>
 #include "rbundle.h"
 
 /*********************************************
@@ -166,10 +167,8 @@ protected:
 	// params : Ψ(xₖ₊₁), Φ(xₖ₊₁), f(xₖ₊₁), Θₖ(μₖ₊₁)
 	virtual bool stoppingTest(double, double, double, double);
 
-	// write logs about values of f, Ψ, the duality gap,
-	// the number of inner iterations and the delta for
-	// the stopping test
-	void writeLogs(std::string name);
+	std::deque<double> log_f, log_psi, log_gap, log_delta;
+	std::deque<int> log_nb;
 
 public:
 
@@ -214,5 +213,10 @@ public:
 	rbsopb* setVerbosity(int n);
 
 	virtual double solve(VectorXd&);
+
+	// write logs about values of f, Ψ, the duality gap,
+	// the number of inner iterations and the delta for
+	// the stopping test
+	void writeLogs(std::string name);
 
 };

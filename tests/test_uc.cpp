@@ -132,7 +132,7 @@ double f(int i, VectorXd& x, VectorXd& b, VectorXd& A) {
 ////////////////
 
 int T = 24;
-double k = 50.0;
+double k = 100.0;
 double mu[] = {
 	2288.4, 2590.1, 3002.8, 3165.6, 3313.9, 3454.0, 3314.7, 3073.9,
 	2518.0, 2034.4, 1610.9, 1010.0, 1613.6, 2034.7, 2515.4, 3066.5,
@@ -264,6 +264,11 @@ int main(int argc, char const *argv[])
 	double psival = psi(sol, g);
 	std::cout << "Ψ(x) = " << psival << std::endl;
 	std::cout << "f+Ψ  = " << sumfi+psival << std::endl;
+
+	pb->writeLogs("log_ps_"
+		+ std::string(ws  ? "ws" : "nws") + "_"
+		+ std::string(reg ? "r"  : "nr" ) +
+	".txt");
 
 	return 0;
 }

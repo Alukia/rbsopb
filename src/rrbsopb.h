@@ -60,12 +60,10 @@ protected:
 	//virtual double pseudoSchedule(VectorXd& x);
 
 	// // step 2 : return best iterate (least value of f+Φ+ 1/(2tₖ)||x-yₖ||^2)
-	// virtual double bestIterate(MatrixXd& xj,
-	// 	MatrixXd& fj, VectorXd& x);
+	virtual double bestIterate(VectorXd& x);
 
 	// // step 2 : Primal recovery (Dantzig-Wolfe like)
-	// virtual double dantzigWolfe(MatrixXd& xj,
-	// 	MatrixXd& fj, VectorXd& x);
+	// virtual double dantzigWolfe(VectorXd& x);
 
 	// step 3bis & 4 : descent condition & stopping test
 	virtual bool stoppingTest(double psi, double psihat,
